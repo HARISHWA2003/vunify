@@ -1,25 +1,43 @@
-import logo from './logo.svg';
-import './App.css';
+import { Routes, Route } from "react-router-dom";
+import AppLayout from "./components/layout/AppLayout";
 
-function App() {
+
+import { PrimeReactProvider, } from 'primereact/api';
+
+import PortalPage from "./pages/PortalPage";
+import TasksPage from "./pages/TasksPage";
+// import Settings from "./pages/Settings";
+
+// Optional placeholders so sidebar links don't 404
+function Placeholder({ title }) {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="p-4 rounded-2xl bg-white ring-1 ring-black/5">
+      <div className="text-xl font-bold">{title}</div>
+      <div className="text-slate-600 mt-2">Coming soon.</div>
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <PrimeReactProvider value={{ ripple: true }}>
+    <Routes>
+      {/* App Shell */}
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<PortalPage />} />
+        <Route path="/tasks" element={<TasksPage />} />
+        {/* <Route path="/settings" element={<Settings />} /> */}
+
+        {/* placeholders */}
+        <Route path="/projects" element={<Placeholder title="Projects" />} />
+        <Route path="/workforce" element={<Placeholder title="Workforce" />} />
+        <Route path="/finance" element={<Placeholder title="Finance" />} />
+        <Route path="/planning" element={<Placeholder title="Planning" />} />
+        <Route path="/scm" element={<Placeholder title="SCM" />} />
+        <Route path="/grc" element={<Placeholder title="GRC & Audit" />} />
+        <Route path="/admin" element={<Placeholder title="Admin" />} />
+      </Route>
+    </Routes>
+    </PrimeReactProvider>
+  );
+}
