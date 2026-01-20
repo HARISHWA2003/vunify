@@ -6,6 +6,7 @@ import { PrimeReactProvider, } from 'primereact/api';
 
 import PortalPage from "./pages/PortalPage";
 import TasksRoute from "./pages/tasks/TasksRoute";
+import MeetingsRoute from "./pages/meet/meetingsroute";
 
 // import Settings from "./pages/Settings";
 
@@ -27,6 +28,7 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/" element={<PortalPage />} />
 <Route path="/tasks" element={<TasksRoute />} />
+<Route path="/meetings" element={<MeetingsRoute />} />
 
         {/* <Route path="/settings" element={<Settings />} /> */}
 

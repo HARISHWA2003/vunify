@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 
 const navItems = [
   { to: "/tasks", label: "Tasks", icon: "pi pi-check-square" },
+  { to: "/meetings", label: "Meetings", icon: "pi pi-calendar" },
   { to: "/sales", label: "Sales", icon: "pi pi-shopping-cart" },
   { to: "/projects", label: "Projects", icon: "pi pi-briefcase" },
   { to: "/works", label: "Works", icon: "pi pi-wrench" },
