@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Column } from "primereact/column";
-import TableCard from "../components/common/TableCard";
+import TableCard from "../../components/common/TableCard";
 
 function makeMockTasks(count = 176) {
   const levels = ["Epic/Module", "Module", "Task", "Subtask"];

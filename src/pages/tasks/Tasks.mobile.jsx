@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import BlurbView from "../components/common/BlurbView";
-import ListView from "../components/common/ListView";
+import BlurbView from "../../components/common/BlurbView";
+import ListView from "../../components/common/ListView";
 
 /* ===================== SIMPLE TOAST ===================== */
 function Toast({ message }) {

@@ -5,7 +5,8 @@ import AppLayout from "./components/layout/AppLayout";
 import { PrimeReactProvider, } from 'primereact/api';
 
 import PortalPage from "./pages/PortalPage";
-import TasksPage from "./pages/TasksPage";
+import TasksRoute from "./pages/tasks/TasksRoute";
+
 // import Settings from "./pages/Settings";
 
 // Optional placeholders so sidebar links don't 404
@@ -25,7 +26,8 @@ export default function App() {
       {/* App Shell */}
       <Route element={<AppLayout />}>
         <Route path="/" element={<PortalPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
+<Route path="/tasks" element={<TasksRoute />} />
+
         {/* <Route path="/settings" element={<Settings />} /> */}
 
         {/* placeholders */}
