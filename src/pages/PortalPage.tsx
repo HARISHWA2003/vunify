@@ -3,7 +3,47 @@ import { useNavigate } from "react-router-dom";
 
 /* ===================== DUMMY SERVICES ===================== */
 
-async function getAuthFromPreference() {
+import { taskService } from "../services/taskService";
+
+import NewTask from "./tasks/NewTask.web";
+import MeetingDetails from "./meetings/MeetingDetails.web";
+
+interface AuthData {
+  uId: string;
+  roleId: string;
+}
+
+interface PortalItem {
+  name: string;
+  apprcount: number;
+}
+
+interface PortalCard {
+  label: string;
+  icon: string;
+  count: number;
+  list_route: string;
+  new_route: string;
+  isCustom?: boolean; // Flag to handle custom logic like Tasks
+}
+
+// Map names to PrimeIcons
+const ICON_MAP: Record<string, string> = {
+  tasks: "pi pi-check-square",
+  leaves: "pi pi-calendar-minus",
+  expenses: "pi pi-wallet",
+  inventory: "pi pi-box",
+  reports: "pi pi-chart-bar",
+  settings: "pi pi-cog",
+  meetings: "pi pi-calendar",
+  payslips: "pi pi-file",
+  team: "pi pi-users",
+  assets: "pi pi-tablet",
+  documents: "pi pi-file-o",
+  calendar: "pi pi-calendar",
+};
+
+async function getAuthFromPreference(): Promise<AuthData | null> {
   if (typeof window === "undefined") return null;
 
   const raw = localStorage.getItem("auth");
@@ -16,10 +56,10 @@ async function getAuthFromPreference() {
   }
 }
 
-async function getPortalByUser(roleId, uId) {
+async function getPortalByUser(roleId: string, uId: string): Promise<PortalItem[]> {
   await new Promise((r) => setTimeout(r, 300));
 
-  if (Math.random() < 0.3) return [];
+  // if (Math.random() < 0.3) return [];
 
   return [
     { name: "Tasks", apprcount: 12 },
@@ -28,12 +68,18 @@ async function getPortalByUser(roleId, uId) {
     { name: "Inventory", apprcount: 6 },
     { name: "Reports", apprcount: 2 },
     { name: "Settings", apprcount: 1 },
+    { name: "Meetings", apprcount: 4 },
+    { name: "Payslips", apprcount: 0 },
+    { name: "Team", apprcount: 8 },
+    { name: "Assets", apprcount: 15 },
+    { name: "Documents", apprcount: 5 },
+    { name: "Calendar", apprcount: 1 },
   ];
 }
 
 /* ===================== TOAST (simple demo) ===================== */
 
-function Toast({ message }) {
+function Toast({ message }: { message: string | null }) {
   if (!message) return null;
   return (
     <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50">
@@ -51,12 +97,25 @@ export default function PortalPage() {
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
-  const skeletonArray = useMemo(() => Array.from({ length: 6 }), []);
+  const skeletonArray = useMemo(() => Array.from({ length: 12 }), []);
 
-  const [uId, setUId] = useState();
-  const [roleId, setRoleId] = useState();
-  const [portalCards, setPortalCards] = useState([]);
-  const [toastMsg, setToastMsg] = useState(null);
+  const [uId, setUId] = useState<string>();
+  const [roleId, setRoleId] = useState<string>();
+  const [portalCards, setPortalCards] = useState<PortalCard[]>([]);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // New Task Modal State
+  const [newTaskVisible, setNewTaskVisible] = useState(false);
+  const [meetingModalVisible, setMeetingModalVisible] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     // Demo helper: set auth once if missing
@@ -74,20 +133,22 @@ export default function PortalPage() {
   async function loadAuthAndPortal() {
     try {
       const auth = await waitForAuth();
-      setUId(auth.uId);
-      setRoleId(auth.roleId);
+      if (auth) {
+          setUId(auth.uId);
+          setRoleId(auth.roleId);
 
-      // keep skeleton for 2 seconds (like your Angular setTimeout)
-      setTimeout(() => {
-        loadPortalWithRetry(auth.uId, auth.roleId);
-      }, 2000);
+          // keep skeleton for 2 seconds (like your Angular setTimeout)
+          setTimeout(() => {
+            loadPortalWithRetry(auth.uId, auth.roleId);
+          }, 2000);
+      }
     } catch (err) {
       console.error("[Portal] Auth not available", err);
       finishLoading();
     }
   }
 
-  async function waitForAuth(retries = 10, delayMs = 150) {
+  async function waitForAuth(retries = 10, delayMs = 150): Promise<AuthData | null> {
     for (let i = 0; i < retries; i++) {
       const auth = await getAuthFromPreference();
       if (auth) return auth;
@@ -96,12 +157,15 @@ export default function PortalPage() {
     throw new Error("Auth not found after waiting");
   }
 
-  function buildCardsFromApi(res) {
+  function buildCardsFromApi(res: PortalItem[]): PortalCard[] {
     return res.map((item) => {
       const name = item.name.trim().toLowerCase();
+      // Use map or default
+      const iconClass = ICON_MAP[name] || "pi pi-circle";
+      
       return {
         label: item.name,
-        icon: `/icons/portal/${name}.svg`,
+        icon: iconClass,
         count: Number(item.apprcount ?? 0),
         list_route: `/${name}`,
         new_route: `/${name}/new`,
@@ -109,9 +173,22 @@ export default function PortalPage() {
     });
   }
 
-  async function loadPortalWithRetry(uId_, roleId_, retryCount = 0) {
+  async function loadPortalWithRetry(uId_: string, roleId_: string, retryCount = 0) {
     try {
       const res = await getPortalByUser(roleId_, uId_);
+      
+      // Fetch real task count to override
+      const tasks = await taskService.getTasks();
+      const taskCount = tasks.length;
+      
+      // Override Tasks count in the response or append it if missing
+      const taskItemIndex = res.findIndex(i => i.name === "Tasks");
+      if (taskItemIndex !== -1) {
+          res[taskItemIndex].apprcount = taskCount;
+      } else {
+          // ensure tasks exists if you want to show it
+          res.unshift({ name: "Tasks", apprcount: taskCount });
+      }
 
       if (!res.length && retryCount < 3) {
         setTimeout(
@@ -138,7 +215,7 @@ export default function PortalPage() {
     window.setTimeout(() => setToastMsg(null), 2500);
   }
 
-  function navigateOrToast(route) {
+  function navigateOrToast(route: string) {
     try {
       navigate(route);
     } catch {
@@ -146,18 +223,31 @@ export default function PortalPage() {
     }
   }
 
-  function onAdd(card) {
+  function onAdd(card: PortalCard) {
+    if (card.label === "Tasks") {
+        if (isMobile) {
+            navigate("/tasks/new");
+        } else {
+            setNewTaskVisible(true);
+        }
+        return;
+    }
+    if (card.label === "Meetings") {
+        // Open Meeting Modal for both Web and Mobile
+        setMeetingModalVisible(true);
+        return;
+    }
     navigateOrToast(card.new_route);
   }
 
-  function onCountClick(card) {
+  function onCountClick(card: PortalCard) {
     navigateOrToast(card.list_route);
   }
 
   return (
     <div className="px-4 py-3 bg-[#EDE9FE] min-h-dvh">
       <Toast message={toastMsg} />
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {loading ? (
           <>
             {skeletonArray.map((_, idx) => (
@@ -189,16 +279,9 @@ export default function PortalPage() {
               >
                 <div className="flex justify-between items-start">
                   <div className="flex flex-col items-start">
-                    <img
-                      src={c.icon}
-                      className="w-8 h-8 mb-2"
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        img.onerror = null;
-                        img.src = "/icons/portal/settings.svg";
-                      }}
-                      alt=""
-                    />
+                    <div className={`w-12 h-12 mb-4 flex items-center justify-center rounded-xl bg-indigo-100 text-indigo-600`}>
+                        <i className={`${c.icon} text-3xl`} />
+                    </div>
                     <div className="text-[15px] md:text-md font-medium text-slate-800 leading-snug">
                       {c.label}
                     </div>
@@ -235,6 +318,29 @@ export default function PortalPage() {
         <div>uId: {uId ?? "-"}</div>
         <div>roleId: {roleId ?? "-"}</div>
       </div>
+      
+      {/* New Task Modal (Web only, detected via logic but component renders conditionally controlled by visible prop) */}
+      {!isMobile && (
+          <NewTask 
+            visible={newTaskVisible} 
+            onHide={() => setNewTaskVisible(false)} 
+            onSuccess={() => {
+                // Refresh counts
+                loadPortalWithRetry(uId!, roleId!);
+            }} 
+          />
+      )}
+      
+      <MeetingDetails 
+          visible={meetingModalVisible} 
+          onHide={() => setMeetingModalVisible(false)} 
+          meeting={null}
+          onSuccess={() => {
+              // Refresh counts if we had meetings count fetched dynamically, 
+              // currently meetings count is mocked in getPortalByUser but we could reload.
+              loadPortalWithRetry(uId!, roleId!);
+          }}
+      />
     </div>
   );
 }

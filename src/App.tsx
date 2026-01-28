@@ -6,12 +6,16 @@ import { PrimeReactProvider, } from 'primereact/api';
 
 import PortalPage from "./pages/PortalPage";
 import TasksRoute from "./pages/tasks/TasksRoute";
-import MeetingsRoute from "./pages/meet/meetingsroute";
+import NewTaskMobile from "./pages/tasks/NewTask.mobile";
+import TaskDetailsMobile from "./pages/tasks/TaskDetails.mobile";
+import MeetingsRoute from "./pages/meetings/meetingsroute";
+import NewMeetingMobile from "./pages/meetings/NewMeeting.mobile";
+import MeetingDetailsMobile from "./pages/meetings/MeetingDetails.mobile";
 
 // import Settings from "./pages/Settings";
 
 // Optional placeholders so sidebar links don't 404
-function Placeholder({ title }) {
+function Placeholder({ title }: { title: string }) {
   return (
     <div className="p-4 rounded-2xl bg-white ring-1 ring-black/5">
       <div className="text-xl font-bold">{title}</div>
@@ -28,7 +32,11 @@ export default function App() {
       <Route element={<AppLayout />}>
         <Route path="/" element={<PortalPage />} />
 <Route path="/tasks" element={<TasksRoute />} />
+        <Route path="/tasks/new" element={<NewTaskMobile />} />
+        <Route path="/tasks/:id" element={<TaskDetailsMobile />} />
 <Route path="/meetings" element={<MeetingsRoute />} />
+<Route path="/meetings/new" element={<NewMeetingMobile />} />
+<Route path="/meetings/:id" element={<MeetingDetailsMobile />} />
 
         {/* <Route path="/settings" element={<Settings />} /> */}
 

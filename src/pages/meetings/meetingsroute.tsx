@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import MeetingsWeb from "./meetings.web.jsx";
-import MeetingsMobile from "./meetings.mobile.jsx";
+import MeetingsWeb from "./meetings.web";
+import MeetingsMobile from "./meetings.mobile";
 
 export default function MeetingsRoute() {
   const [isMobile, setIsMobile] = useState(false);

@@ -1,9 +1,21 @@
-export default function BlurbView({ data, clickable = true, onCardClick }) {
+interface BlurbData {
+  title: string;
+  subtitle?: string;
+  fields?: { label: string; value: string | number | null }[];
+}
+
+interface BlurbViewProps {
+  data: BlurbData;
+  clickable?: boolean;
+  onCardClick?: () => void;
+}
+
+export default function BlurbView({ data, clickable = true, onCardClick }: BlurbViewProps) {
   const handleClick = () => {
     if (clickable && typeof onCardClick === "function") onCardClick();
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!clickable) return;
     if (e.key === "Enter") handleClick();
   };

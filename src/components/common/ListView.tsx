@@ -1,24 +1,33 @@
-import React from "react";
+import React, { ReactNode } from "react";
 
-/**
- * columns: [
- *  {
- *    key: "name",
- *    header: "Name",
- *    sortable: true,
- *    accessor?: (row) => any,
- *    formatter?: (value, row) => string,
- *    placeholder?: string,
- *    widthClass?: string,
- *    thClass?: string,
- *    tdClass?: string,
- *  }
- * ]
- *
- * sort: { key: string, dir: "asc" | "desc" } | null
- * pagingSkeleton: ReactNode (optional) rendered 3 times when isPaging=true
- */
-export default function ListView({
+export interface Column<T> {
+  key: string;
+  header: string;
+  sortable?: boolean;
+  accessor?: (row: T) => any;
+  formatter?: (value: any, row: T) => ReactNode;
+  placeholder?: string;
+  widthClass?: string;
+  thClass?: string;
+  tdClass?: string;
+}
+
+export interface SortState {
+  key: string;
+  dir: "asc" | "desc";
+}
+
+interface ListViewProps<T> {
+  columns: Column<T>[];
+  rows: T[];
+  sort?: SortState | null;
+  isPaging?: boolean;
+  pagingSkeleton?: ReactNode;
+  onRowClick?: (row: T) => void;
+  onSortChange?: (sort: SortState) => void;
+}
+
+export default function ListView<T extends { id?: string | number }>({
   columns,
   rows,
   sort = null,
@@ -26,39 +35,40 @@ export default function ListView({
   pagingSkeleton = null,
   onRowClick,
   onSortChange,
-}) {
-  const isSortActive = (col) => !!sort && sort.key === col.key;
+}: ListViewProps<T>) {
+  const isSortActive = (col: Column<T>) => !!sort && sort.key === col.key;
 
-  const sortIcon = (col) => {
+  const sortIcon = (col: Column<T>) => {
     if (!col.sortable) return "";
     if (!isSortActive(col)) return "▲";
     return sort?.dir === "asc" ? "▲" : "▼";
   };
 
-  const sortIconClass = (col) => {
+  const sortIconClass = (col: Column<T>) => {
     if (!col.sortable) return "";
     return isSortActive(col) ? "text-gray-600" : "text-gray-300";
   };
 
-  const getCellValue = (col, row) => {
+  const getCellValue = (col: Column<T>, row: T) => {
     if (typeof col.accessor === "function") return col.accessor(row);
+    // @ts-ignore
     return row?.[col.key];
   };
 
-  const renderCell = (col, row) => {
+  const renderCell = (col: Column<T>, row: T) => {
     const raw = getCellValue(col, row);
     const empty = raw === null || raw === undefined || raw === "";
     const value = empty ? (col.placeholder ?? "-") : raw;
     return typeof col.formatter === "function" ? col.formatter(value, row) : String(value);
   };
 
-  const handleHeaderClick = (col) => {
+  const handleHeaderClick = (col: Column<T>) => {
     if (!col.sortable) return;
 
     const currentKey = sort?.key;
     const currentDir = sort?.dir ?? "asc";
 
-    let nextDir = "asc";
+    let nextDir: "asc" | "desc" = "asc";
     if (currentKey === col.key) {
       nextDir = currentDir === "asc" ? "desc" : "asc";
     }
@@ -113,7 +123,7 @@ export default function ListView({
                         "px-4 py-3 whitespace-nowrap max-w-0 overflow-hidden truncate",
                         col.tdClass || "",
                       ].join(" ")}
-                      title={cellText}
+                      title={typeof cellText === "string" || typeof cellText === "number" ? String(cellText) : undefined}
                     >
                       {cellText}
                     </td>

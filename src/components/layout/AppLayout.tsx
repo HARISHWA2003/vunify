@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import Topbar from "./topbar";
 import Sidebar from "./sidebar";
 
+import MobileTopBar from "./MobileTopBar";
+
 export default function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -27,8 +29,8 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Topbar always visible */}
-      <Topbar />
+      {/* Topbar logic */}
+      {isMobile ? <MobileTopBar /> : <Topbar />}
 
       {/* Body */}
       <div className="flex">
@@ -41,7 +43,7 @@ export default function AppLayout() {
         )}
 
         {/* Canvas */}
-        <main className="min-h-[calc(100vh-56px)] w-full bg-slate-50">
+        <main className="min-h-[calc(100vh-56px)] flex-1 min-w-0 overflow-hidden bg-slate-50">
           <Outlet />
         </main>
       </div>

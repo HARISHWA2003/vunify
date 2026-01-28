@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import NewTask from "./NewTask.web";
 
 import BlurbView from "../../components/common/BlurbView";
-import ListView from "../../components/common/ListView";
+import ListView, { Column } from "../../components/common/ListView";
+import { taskService } from "../../services/taskService";
+import { Task } from "../../data/mockData";
 
 /* ===================== SIMPLE TOAST ===================== */
-function Toast({ message }) {
+function Toast({ message }: { message: string | null }) {
   if (!message) return null;
   return (
     <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50">
@@ -14,29 +18,6 @@ function Toast({ message }) {
       </div>
     </div>
   );
-}
-
-/* ===================== MOCK DATA (replace later with API) ===================== */
-function makeMockTasks(count = 60) {
-  const priorities = ["High", "Medium", "Low"];
-  const projects = ["Alpha", "Beta", "Gamma", "Delta"];
-  return Array.from({ length: count }).map((_, i) => {
-    const taskId = `T-${1000 + i}`;
-    const priority = priorities[i % priorities.length];
-    const projectName = projects[i % projects.length];
-    return {
-      id: taskId,
-      taskId,
-      taskName: `Task ${i + 1}`,
-      projectName,
-      taskLagdays: String((i * 2) % 15),
-      tsktpdEstDur: String((i % 10) + 1),
-      pertskcompln: (i * 7) % 101,
-      priority,
-      assignee: ["Haris", "Asha", "Ravi", "Meena"][i % 4],
-      status: ["Open", "In Progress", "Closed"][i % 3],
-    };
-  });
 }
 
 /* ===================== SKELETONS ===================== */
@@ -84,7 +65,9 @@ function ListRowSkeleton() {
 
 /* ===================== PAGE ===================== */
 export default function TasksPage() {
-  const [toastMsg, setToastMsg] = useState(null);
+  const navigate = useNavigate();
+  const [modalVisible, setModalVisible] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   function showInfoToast(msg = "This action will be enabled later.") {
     setToastMsg(msg);
@@ -92,7 +75,7 @@ export default function TasksPage() {
   }
 
   // view toggle
-  const [viewMode, setViewMode] = useState("card");
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const toggleView = () => setViewMode((v) => (v === "card" ? "list" : "card"));
 
   // search with debounce
@@ -104,15 +87,15 @@ export default function TasksPage() {
   }, [searchTerm]);
 
   // sort
-  const [sort, setSort] = useState({ key: "taskName", dir: "asc" });
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
 
   // filter panel
   const [filterOpen, setFilterOpen] = useState(false);
   const [filter, setFilter] = useState({
     title: "",
-    taskLagdays: "",
-    pertskcompln: "",
-    tsktpdEstDur: "",
+    lagDays: "",
+    percentComplete: "",
+    topDownDuration: "",
     priority: "",
   });
   const [filterVersion, setFilterVersion] = useState(0);
@@ -126,9 +109,9 @@ export default function TasksPage() {
   const resetFilter = () => {
     setFilter({
       title: "",
-      taskLagdays: "",
-      pertskcompln: "",
-      tsktpdEstDur: "",
+      lagDays: "",
+      percentComplete: "",
+      topDownDuration: "",
       priority: "",
     });
     setFilterOpen(false);
@@ -142,18 +125,25 @@ export default function TasksPage() {
   const skeletonRows = useMemo(() => Array.from({ length: 8 }), []);
 
   // data
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const pageSize = 12;
-  const [displayedTasks, setDisplayedTasks] = useState([]);
+  const [displayedTasks, setDisplayedTasks] = useState<Task[]>([]);
 
-  // simulate fetch
+  // load data
+  const loadTasks = async () => {
+      setIsInitialLoading(true);
+      try {
+          const data = await taskService.getTasks();
+          setTasks(data);
+      } catch (error) {
+          console.error("Failed to load tasks", error);
+      } finally {
+          setIsInitialLoading(false);
+      }
+  }
+
   useEffect(() => {
-    setIsInitialLoading(true);
-    const t = setTimeout(() => {
-      setTasks(makeMockTasks(80));
-      setIsInitialLoading(false);
-    }, 700);
-    return () => clearTimeout(t);
+    loadTasks();
   }, []);
 
   const priorityOptions = useMemo(() => {
@@ -171,18 +161,18 @@ export default function TasksPage() {
     return tasks.filter((t) => {
       const inSearch =
         !q ||
-        [t.taskName, t.projectName, t.assignee]
+        [t.name, t.projectName, t.assignedTo]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(q));
 
       const matchesTitle =
-        !f.title || String(t.taskName ?? "").toLowerCase().includes(f.title.toLowerCase());
+        !f.title || String(t.name ?? "").toLowerCase().includes(f.title.toLowerCase());
 
-      const matchesLag = !f.taskLagdays || String(t.taskLagdays ?? "").includes(f.taskLagdays);
+      const matchesLag = !f.lagDays || String(t.lagDays ?? "").includes(f.lagDays);
 
-      const matchesPercent = !f.pertskcompln || String(t.pertskcompln ?? "").includes(f.pertskcompln);
+      const matchesPercent = !f.percentComplete || String(t.percentComplete ?? "").includes(f.percentComplete);
 
-      const matchesTopDown = !f.tsktpdEstDur || String(t.tsktpdEstDur ?? "").includes(f.tsktpdEstDur);
+      const matchesTopDown = !f.topDownDuration || String(t.topDownDuration ?? "").includes(f.topDownDuration);
 
       const matchesPriority = !f.priority || t.priority === f.priority;
 
@@ -195,12 +185,12 @@ export default function TasksPage() {
     const { key, dir } = sort;
 
     arr.sort((a, b) => {
-      if (key === "taskName") {
-        const cmp = String(a.taskName ?? "").localeCompare(String(b.taskName ?? ""));
+      if (key === "name") {
+        const cmp = String(a.name ?? "").localeCompare(String(b.name ?? ""));
         return dir === "asc" ? cmp : -cmp;
       }
-      if (key === "pertskcompln") {
-        const cmp = (a.pertskcompln ?? 0) - (b.pertskcompln ?? 0);
+      if (key === "percentComplete") {
+        const cmp = (a.percentComplete ?? 0) - (b.percentComplete ?? 0);
         return dir === "asc" ? cmp : -cmp;
       }
       const cmp = String(a.priority ?? "").localeCompare(String(b.priority ?? ""));
@@ -243,51 +233,53 @@ export default function TasksPage() {
     setIsPaging(true);
     setTimeout(() => {
       const next = sortedTasks.slice(shown, shown + pageSize);
-      setDisplayedTasks((prev) => [...prev, ...next]);
+          setDisplayedTasks((prev) => [...prev, ...next]);
       setIsPaging(false);
     }, 400);
   }
 
-  const listColumns = useMemo(
+  const columns: Column<Task>[] = useMemo(
     () => [
       {
-        key: "taskName",
-        header: "Task",
-        widthClass: "w-3/6",
+        key: "name",
+        header: "Name",
         sortable: true,
-        placeholder: "(Untitled Task)",
-        accessor: (t) => t.taskName,
+        accessor: (t: Task) => t.name,
+        formatter: (v: string, t: Task) => (
+          <div>
+            <div className="font-semibold text-slate-900">{v}</div>
+            {/* <div className="text-xs text-slate-500">{t.taskId}</div> */}
+          </div>
+        ),
       },
       {
-        key: "pertskcompln",
-        header: "% Comp.",
-        widthClass: "w-1/6",
+        key: "projectName",
+        header: "Project",
         sortable: true,
-        placeholder: "-",
-        accessor: (t) => t.pertskcompln,
-        formatter: (v) => (v === "-" || v === null || v === undefined ? "-" : String(v)),
+        accessor: (t: Task) => t.projectName,
+        widthClass: "w-24",
       },
       {
-        key: "priority",
-        header: "Priority",
-        widthClass: "w-2/6",
+        key: "lagDays",
+        header: "Lag",
         sortable: true,
-        placeholder: "-",
-        accessor: (t) => t.priority,
+        accessor: (t: Task) => t.lagDays,
+        widthClass: "w-16 text-right",
+        formatter: (v: string) => <span className="text-red-600 font-medium">{v}d</span>,
       },
     ],
     []
   );
-
-  function mapTaskToBlurb(t) {
+  function mapTaskToBlurb(t: Task) {
     return {
-      title: t.taskName || "(Untitled)",
+      title: t.name || "(Untitled)",
       subtitle: `Session ${t.projectName || "-"}`,
       fields: [
-        { label: "Lag (days)", value: t.taskLagdays },
-        { label: "Top-down dur", value: t.tsktpdEstDur },
-        { label: "% Complete", value: t.pertskcompln },
-        { label: "End Priority", value: t.priority },
+        { label: "Lag", value: t.lagDays ? `${t.lagDays}d` : "-" },
+        { label: "Est. Dur", value: t.topDownDuration ?? "-" },
+        { label: "% Comp", value: t.percentComplete ?? 0 },
+        { label: "Priority", value: t.priority ?? "-" },
+        // { label: "Est Start", value: t.estimatedStart ? new Date(t.estimatedStart).toLocaleDateString() : "-" },
       ],
     };
   }
@@ -305,9 +297,9 @@ export default function TasksPage() {
           aria-label={viewMode === "card" ? "Switch to list view" : "Switch to card view"}
         >
           {viewMode === "card" ? (
-            <img src="/icons/list.svg" alt="Switch to list view" className="h-8 w-8" />
+            <i className="pi pi-list text-xl text-gray-600" />
           ) : (
-            <img src="/icons/blurb.svg" alt="Switch to card view" className="h-8 w-8" />
+            <i className="pi pi-th-large text-xl text-gray-600" />
           )}
         </button>
 
@@ -346,17 +338,28 @@ export default function TasksPage() {
         </div>
 
         <button type="button" className="p-2 rounded hover:bg-gray-50" onClick={() => setFilterOpen((v) => !v)}>
-          <img src="/icons/filter.svg" alt="Toggle filters" className="h-8 w-8" />
+          <i className="pi pi-filter text-xl text-gray-600" />
         </button>
 
         <button
-          onClick={() => showInfoToast("Add Task will be enabled later.")}
-          className="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl"
-          aria-label="Add task"
-        >
-          +
-        </button>
+  type="button"
+  onClick={() => navigate("/tasks/new")}
+  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center shrink-0 shadow-sm"
+  aria-label="Add task"
+>
+  <i className="pi pi-plus text-sm" />
+</button>
       </div>
+
+      <NewTask 
+        visible={modalVisible} 
+        onHide={() => setModalVisible(false)} 
+        onSuccess={() => {
+            loadTasks();
+            setModalVisible(false);
+            showInfoToast("Task created successfully");
+        }} 
+      />
 
       {/* FILTER PANEL */}
       <div className={`grid transition-all duration-300 ease-in-out mb-3 ${filterOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
@@ -365,13 +368,13 @@ export default function TasksPage() {
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Lag (days)</label>
-                <input
-                  type="number"
-                  placeholder="Any"
-                  value={filter.taskLagdays}
-                  onChange={(e) => setFilter((p) => ({ ...p, taskLagdays: e.target.value }))}
-                  className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                  <input
+                    type="number"
+                    placeholder="Any"
+                    value={filter.lagDays}
+                    onChange={(e) => setFilter((p) => ({ ...p, lagDays: e.target.value }))}
+                    className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
               </div>
 
               <div>
@@ -397,8 +400,8 @@ export default function TasksPage() {
                 <input
                   type="number"
                   placeholder="Any"
-                  value={filter.tsktpdEstDur}
-                  onChange={(e) => setFilter((p) => ({ ...p, tsktpdEstDur: e.target.value }))}
+                  value={filter.topDownDuration}
+                  onChange={(e) => setFilter((p) => ({ ...p, topDownDuration: e.target.value }))}
                   className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -410,8 +413,8 @@ export default function TasksPage() {
                   placeholder="Any"
                   min={0}
                   max={100}
-                  value={filter.pertskcompln}
-                  onChange={(e) => setFilter((p) => ({ ...p, pertskcompln: e.target.value }))}
+                  value={filter.percentComplete}
+                  onChange={(e) => setFilter((p) => ({ ...p, percentComplete: e.target.value }))}
                   className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -462,21 +465,21 @@ export default function TasksPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {displayedTasks.map((t) => (
               <BlurbView
-                key={t.taskId}
+                key={t.id}
                 data={mapTaskToBlurb(t)}
-                onCardClick={() => showInfoToast(`Clicked ${t.taskId}`)}
+                onCardClick={() => navigate(`/tasks/${t.id}`)}
               />
             ))}
             {isPaging ? <CardSkeleton /> : null}
           </div>
         ) : (
-          <ListView
-            columns={listColumns}
+          <ListView<Task>
+            columns={columns}
             rows={displayedTasks}
             sort={sort}
             isPaging={isPaging}
             pagingSkeleton={<ListRowSkeleton />}
-            onRowClick={(t) => showInfoToast(`Clicked ${t.taskId}`)}
+            onRowClick={(t) => navigate(`/tasks/${t.id}`)}
             onSortChange={setSort}
           />
         )}

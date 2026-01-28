@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import BlurbView from "../../components/common/BlurbView";
-import ListView from "../../components/common/ListView";
+import ListView, { Column } from "../../components/common/ListView";
+import { meetingService } from "../../services/meetingService";
+import { Meeting } from "../../data/mockData";
+import MeetingDetails from "./MeetingDetails.web";
 
 /* ===================== SIMPLE TOAST ===================== */
-function Toast({ message }) {
+function Toast({ message }: { message: string | null }) {
   if (!message) return null;
   return (
     <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50">
@@ -14,29 +18,6 @@ function Toast({ message }) {
       </div>
     </div>
   );
-}
-
-/* ===================== MOCK DATA (replace later with API) ===================== */
-function makeMockTasks(count = 60) {
-  const priorities = ["High", "Medium", "Low"];
-  const projects = ["Alpha", "Beta", "Gamma", "Delta"];
-  return Array.from({ length: count }).map((_, i) => {
-    const taskId = `T-${1000 + i}`;
-    const priority = priorities[i % priorities.length];
-    const projectName = projects[i % projects.length];
-    return {
-      id: taskId,
-      taskId,
-      taskName: `Task ${i + 1}`,
-      projectName,
-      taskLagdays: String((i * 2) % 15),
-      tsktpdEstDur: String((i % 10) + 1),
-      pertskcompln: (i * 7) % 101,
-      priority,
-      assignee: ["Haris", "Asha", "Ravi", "Meena"][i % 4],
-      status: ["Open", "In Progress", "Closed"][i % 3],
-    };
-  });
 }
 
 /* ===================== SKELETONS ===================== */
@@ -52,18 +33,11 @@ function CardSkeleton() {
         <div className="space-y-2">
           <div className="h-4 w-[90%] bg-gray-200 rounded animate-pulse" />
           <div className="h-4 w-[80%] bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-[70%] bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-[60%] bg-gray-200 rounded animate-pulse" />
         </div>
         <div className="space-y-2">
           <div className="h-4 w-[90%] bg-gray-200 rounded animate-pulse" />
           <div className="h-4 w-[80%] bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-[70%] bg-gray-200 rounded animate-pulse" />
-          <div className="h-4 w-[60%] bg-gray-200 rounded animate-pulse" />
         </div>
-      </div>
-      <div className="mt-3">
-        <div className="h-4 w-2/5 bg-gray-200 rounded animate-pulse" />
       </div>
     </div>
   );
@@ -86,8 +60,14 @@ function ListRowSkeleton() {
 }
 
 /* ===================== PAGE ===================== */
-export default function MeetingsPage() {
-  const [toastMsg, setToastMsg] = useState(null);
+export default function MeetingsPageMobile() {
+  const navigate = useNavigate();
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Modal State
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+  const [detailsVisible, setDetailsVisible] = useState(false);
+
 
   function showInfoToast(msg = "This action will be enabled later.") {
     setToastMsg(msg);
@@ -95,7 +75,7 @@ export default function MeetingsPage() {
   }
 
   // view toggle
-  const [viewMode, setViewMode] = useState("card");
+  const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const toggleView = () => setViewMode((v) => (v === "card" ? "list" : "card"));
 
   // search with debounce
@@ -107,16 +87,15 @@ export default function MeetingsPage() {
   }, [searchTerm]);
 
   // sort
-  const [sort, setSort] = useState({ key: "taskName", dir: "asc" });
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "subject", dir: "asc" });
 
   // filter panel
   const [filterOpen, setFilterOpen] = useState(false);
   const [filter, setFilter] = useState({
-    title: "",
-    taskLagdays: "",
-    pertskcompln: "",
-    tsktpdEstDur: "",
-    priority: "",
+    subject: "",
+    type: "",
+    status: "",
+    engagement: "",
   });
   const [filterVersion, setFilterVersion] = useState(0);
 
@@ -128,11 +107,10 @@ export default function MeetingsPage() {
 
   const resetFilter = () => {
     setFilter({
-      title: "",
-      taskLagdays: "",
-      pertskcompln: "",
-      tsktpdEstDur: "",
-      priority: "",
+      subject: "",
+      type: "",
+      status: "",
+      engagement: "",
     });
     setFilterOpen(false);
     setFilterVersion((n) => n + 1);
@@ -145,98 +123,78 @@ export default function MeetingsPage() {
   const skeletonRows = useMemo(() => Array.from({ length: 8 }), []);
 
   // data
-  const [tasks, setTasks] = useState([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
   const pageSize = 12;
-  const [displayedTasks, setDisplayedTasks] = useState([]);
+  const [displayedMeetings, setDisplayedMeetings] = useState<Meeting[]>([]);
 
-  // simulate fetch
+  // fetch
   useEffect(() => {
     setIsInitialLoading(true);
-    const t = setTimeout(() => {
-      setTasks(makeMockTasks(80));
-      setIsInitialLoading(false);
-    }, 700);
-    return () => clearTimeout(t);
+    meetingService.getMeetings().then((data) => {
+        setMeetings(data);
+        setIsInitialLoading(false);
+    });
   }, []);
 
-  const priorityOptions = useMemo(() => {
-    const vals = Array.from(
-      new Set(tasks.map((t) => t.priority).filter(Boolean)),
-    );
+  const typeOptions = useMemo(() => {
+    const vals = Array.from(new Set(meetings.map((m) => m.type).filter(Boolean)));
     return vals.map((v) => ({ label: v, value: v }));
-  }, [tasks]);
+  }, [meetings]);
 
-  const filteredTasks = useMemo(() => {
+  const filteredMeetings = useMemo(() => {
     // eslint-disable-next-line no-unused-vars
     const _ = filterVersion;
 
     const q = debouncedSearch.trim().toLowerCase();
     const f = filter;
 
-    return tasks.filter((t) => {
+    return meetings.filter((m) => {
       const inSearch =
         !q ||
-        [t.taskName, t.projectName, t.assignee]
+        [m.subject, m.engagement, m.assignedTo]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(q));
 
-      const matchesTitle =
-        !f.title ||
-        String(t.taskName ?? "")
+      const matchesSubject =
+        !f.subject ||
+        String(m.subject ?? "")
           .toLowerCase()
-          .includes(f.title.toLowerCase());
+          .includes(f.subject.toLowerCase());
 
-      const matchesLag =
-        !f.taskLagdays || String(t.taskLagdays ?? "").includes(f.taskLagdays);
+      const matchesEngagement =
+        !f.engagement || String(m.engagement ?? "").toLowerCase().includes(f.engagement.toLowerCase());
 
-      const matchesPercent =
-        !f.pertskcompln ||
-        String(t.pertskcompln ?? "").includes(f.pertskcompln);
-
-      const matchesTopDown =
-        !f.tsktpdEstDur ||
-        String(t.tsktpdEstDur ?? "").includes(f.tsktpdEstDur);
-
-      const matchesPriority = !f.priority || t.priority === f.priority;
+      const matchesType = !f.type || m.type === f.type;
+      
+      const matchesStatus = !f.status || m.status === f.status;
 
       return (
         inSearch &&
-        matchesTitle &&
-        matchesLag &&
-        matchesPercent &&
-        matchesTopDown &&
-        matchesPriority
+        matchesSubject &&
+        matchesEngagement &&
+        matchesType &&
+        matchesStatus
       );
     });
-  }, [tasks, debouncedSearch, filter, filterVersion]);
+  }, [meetings, debouncedSearch, filter, filterVersion]);
 
-  const sortedTasks = useMemo(() => {
-    const arr = [...filteredTasks];
+  const sortedMeetings = useMemo(() => {
+    const arr = [...filteredMeetings];
     const { key, dir } = sort;
 
-    arr.sort((a, b) => {
-      if (key === "taskName") {
-        const cmp = String(a.taskName ?? "").localeCompare(
-          String(b.taskName ?? ""),
-        );
+    arr.sort((a: any, b: any) => {
+        const valA = String(a[key] || "").toLowerCase();
+        const valB = String(b[key] || "").toLowerCase();
+        const cmp = valA.localeCompare(valB);
         return dir === "asc" ? cmp : -cmp;
-      }
-      if (key === "pertskcompln") {
-        const cmp = (a.pertskcompln ?? 0) - (b.pertskcompln ?? 0);
-        return dir === "asc" ? cmp : -cmp;
-      }
-      const cmp = String(a.priority ?? "").localeCompare(
-        String(b.priority ?? ""),
-      );
-      return dir === "asc" ? cmp : -cmp;
     });
 
     return arr;
-  }, [filteredTasks, sort]);
+  }, [filteredMeetings, sort]);
 
   useEffect(() => {
-    setDisplayedTasks(sortedTasks.slice(0, pageSize));
-  }, [sortedTasks]);
+    setDisplayedMeetings(sortedMeetings.slice(0, pageSize));
+  }, [sortedMeetings]);
 
   // infinite scroll sentinel
   const sentinelRef = useRef(null);
@@ -247,7 +205,7 @@ export default function MeetingsPage() {
 
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) loadMoreTasks();
+        if (entries[0]?.isIntersecting) loadMoreMeetings();
       },
       { root: null, rootMargin: "0px 0px 200px 0px", threshold: 0.01 },
     );
@@ -255,64 +213,83 @@ export default function MeetingsPage() {
     io.observe(el);
     return () => io.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayedTasks, sortedTasks, isPaging]);
+  }, [displayedMeetings, sortedMeetings, isPaging]);
 
-  function loadMoreTasks() {
+  function loadMoreMeetings() {
     if (isPaging) return;
 
-    const shown = displayedTasks.length;
-    const total = sortedTasks.length;
+    const shown = displayedMeetings.length;
+    const total = sortedMeetings.length;
     if (shown >= total) return;
 
     setIsPaging(true);
     setTimeout(() => {
-      const next = sortedTasks.slice(shown, shown + pageSize);
-      setDisplayedTasks((prev) => [...prev, ...next]);
+      const next = sortedMeetings.slice(shown, shown + pageSize);
+      setDisplayedMeetings((prev) => [...prev, ...next]);
       setIsPaging(false);
     }, 400);
   }
 
-  const listColumns = useMemo(
+  const columns: Column<Meeting>[] = useMemo(
     () => [
       {
-        key: "taskName",
-        header: "Task",
-        widthClass: "w-3/6",
+        key: "subject",
+        header: "Subject",
         sortable: true,
-        placeholder: "(Untitled Task)",
-        accessor: (t) => t.taskName,
+        accessor: (m: Meeting) => m.subject,
+        formatter: (v: string, m: Meeting) => (
+          <div>
+            <div className="font-semibold text-slate-900">{v}</div>
+            <div className="text-xs text-slate-500">ID: {m.id}</div>
+          </div>
+        ),
       },
       {
-        key: "pertskcompln",
-        header: "% Comp.",
-        widthClass: "w-1/6",
+        key: "engagement",
+        header: "Engagement",
         sortable: true,
-        placeholder: "-",
-        accessor: (t) => t.pertskcompln,
-        formatter: (v) =>
-          v === "-" || v === null || v === undefined ? "-" : String(v),
+        accessor: (m: Meeting) => m.engagement,
+        widthClass: "w-24",
       },
       {
-        key: "priority",
-        header: "Priority",
-        widthClass: "w-2/6",
+        key: "startDate",
+        header: "Date",
         sortable: true,
-        placeholder: "-",
-        accessor: (t) => t.priority,
+        accessor: (m: Meeting) => m.startDate,
+        widthClass: "w-24 text-right",
+        formatter: (v: string) => <span className="text-slate-600 text-sm">{v ? new Date(v).toLocaleDateString() : '-'}</span>,
+      },
+      {
+        key: "status",
+        header: "Status",
+        sortable: true,
+        accessor: (m: Meeting) => m.status,
+        widthClass: "w-24",
+        formatter: (v: string) => (
+          <span
+            className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+              v === "Scheduled" ? "bg-blue-100 text-blue-700" : 
+              v === "Completed" ? "bg-green-100 text-green-700" :
+              "bg-gray-100 text-gray-700"
+            }`}
+          >
+            {v}
+          </span>
+        ),
       },
     ],
-    [],
+    []
   );
 
-  function mapTaskToBlurb(t) {
+  function mapMeetingToBlurb(m: Meeting) {
     return {
-      title: t.taskName || "(Untitled)",
-      subtitle: `Session ${t.projectName || "-"}`,
+      title: m.subject || "(Untitled)",
+      subtitle: `${m.engagement || "-"}` + (m.relationship ? ` (${m.relationship})` : ""),
       fields: [
-        { label: "Lag (days)", value: t.taskLagdays },
-        { label: "Top-down dur", value: t.tsktpdEstDur },
-        { label: "% Complete", value: t.pertskcompln },
-        { label: "End Priority", value: t.priority },
+        { label: "Type", value: m.type },
+        { label: "Start Date", value: m.startDate ? new Date(m.startDate).toLocaleDateString() : "-" },
+        { label: "Assignee", value: m.assignedTo },
+        { label: "Status", value: m.status },
       ],
     };
   }
@@ -332,17 +309,9 @@ export default function MeetingsPage() {
           }
         >
           {viewMode === "card" ? (
-            <img
-              src="/icons/list.svg"
-              alt="Switch to list view"
-              className="h-8 w-8"
-            />
+            <i className="pi pi-list text-xl text-gray-600" />
           ) : (
-            <img
-              src="/icons/blurb.svg"
-              alt="Switch to card view"
-              className="h-8 w-8"
-            />
+            <i className="pi pi-th-large text-xl text-gray-600" />
           )}
         </button>
 
@@ -351,7 +320,7 @@ export default function MeetingsPage() {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search tasks..."
+            placeholder="Search meetings..."
             className="w-full p-2 rounded-full border border-gray-300 pl-9 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <svg
@@ -385,17 +354,13 @@ export default function MeetingsPage() {
           className="p-2 rounded hover:bg-gray-50"
           onClick={() => setFilterOpen((v) => !v)}
         >
-          <img
-            src="/icons/filter.svg"
-            alt="Toggle filters"
-            className="h-8 w-8"
-          />
+          <i className="pi pi-filter text-xl text-gray-600" />
         </button>
 
         <button
-          onClick={() => showInfoToast("Add Task will be enabled later.")}
+          onClick={() => { setSelectedMeeting(null); setDetailsVisible(true); }}
           className="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl"
-          aria-label="Add task"
+          aria-label="Add meeting"
         >
           +
         </button>
@@ -410,36 +375,39 @@ export default function MeetingsPage() {
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Lag (days)
-                </label>
-                <input
-                  type="number"
-                  placeholder="Any"
-                  value={filter.taskLagdays}
-                  onChange={(e) =>
-                    setFilter((p) => ({ ...p, taskLagdays: e.target.value }))
-                  }
-                  className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Priority
+                  Type
                 </label>
                 <select
-                  value={filter.priority}
+                  value={filter.type}
                   onChange={(e) =>
-                    setFilter((p) => ({ ...p, priority: e.target.value }))
+                    setFilter((p) => ({ ...p, type: e.target.value }))
                   }
                   className="w-full p-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Any</option>
-                  {priorityOptions.map((o) => (
+                  {typeOptions.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={filter.status}
+                  onChange={(e) =>
+                    setFilter((p) => ({ ...p, status: e.target.value }))
+                  }
+                  className="w-full p-2 rounded-lg border border-gray-300 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Any</option>
+                  <option value="Scheduled">Scheduled</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
                 </select>
               </div>
             </div>
@@ -447,35 +415,19 @@ export default function MeetingsPage() {
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Top-down Duration
+                    Engagement
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   placeholder="Any"
-                  value={filter.tsktpdEstDur}
+                  value={filter.engagement}
                   onChange={(e) =>
-                    setFilter((p) => ({ ...p, tsktpdEstDur: e.target.value }))
+                    setFilter((p) => ({ ...p, engagement: e.target.value }))
                   }
                   className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  % Complete
-                </label>
-                <input
-                  type="number"
-                  placeholder="Any"
-                  min={0}
-                  max={100}
-                  value={filter.pertskcompln}
-                  onChange={(e) =>
-                    setFilter((p) => ({ ...p, pertskcompln: e.target.value }))
-                  }
-                  className="w-full p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
             </div>
 
             <div className="flex items-center gap-4">
@@ -508,9 +460,9 @@ export default function MeetingsPage() {
                 <table className="min-w-full table-fixed text-sm">
                   <thead className="bg-white font-bold text-sm">
                     <tr>
-                      <th className="px-4 py-3 w-3/5">Task</th>
-                      <th className="px-4 py-3 w-1/5">% Complete</th>
-                      <th className="px-4 py-3 w-1/5">Priority</th>
+                      <th className="px-4 py-3 w-3/5">Meeting</th>
+                      <th className="px-4 py-3 w-1/5">Date</th>
+                      <th className="px-4 py-3 w-1/5">Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -524,29 +476,47 @@ export default function MeetingsPage() {
           )
         ) : viewMode === "card" ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {displayedTasks.map((t) => (
+            {displayedMeetings.map((m) => (
               <BlurbView
-                key={t.taskId}
-                data={mapTaskToBlurb(t)}
-                onCardClick={() => showInfoToast(`Clicked ${t.taskId}`)}
+                key={m.id}
+                data={mapMeetingToBlurb(m)}
+                onCardClick={() => { setSelectedMeeting(m); setDetailsVisible(true); }}
               />
             ))}
             {isPaging ? <CardSkeleton /> : null}
           </div>
         ) : (
-          <ListView
-            columns={listColumns}
-            rows={displayedTasks}
+          <ListView<Meeting>
+            columns={columns}
+            rows={displayedMeetings}
             sort={sort}
             isPaging={isPaging}
             pagingSkeleton={<ListRowSkeleton />}
-            onRowClick={(t) => showInfoToast(`Clicked ${t.taskId}`)}
+            onRowClick={(m) => { setSelectedMeeting(m); setDetailsVisible(true); }}
             onSortChange={setSort}
           />
         )}
 
         <div ref={sentinelRef} className="h-1" aria-hidden="true" />
       </div>
+
+       <MeetingDetails 
+            visible={detailsVisible} 
+            onHide={() => setDetailsVisible(false)} 
+            meeting={selectedMeeting}
+            onSuccess={() => {
+               // Reload or trigger refresh
+               window.dispatchEvent(new Event('meeting-updated'));
+               // Re-fetch logic if needed, but the event listener (if any) or just refetching here:
+               // In mobile we use setMeetings manually? 
+               // Actually we should just reload meetings.
+               setIsInitialLoading(true);
+               meetingService.getMeetings().then((data) => {
+                    setMeetings(data);
+                    setIsInitialLoading(false);
+               });
+            }}
+        />
     </div>
   );
 }
